@@ -1,5 +1,73 @@
 const Hospital = require('../models/Hospital');
 const User = require('../models/User');
+const Token = require('../models/Token');
+const Admission = require('../models/Admission');
+const { computeFreeBedSummary } = require('./bed.controller');
+
+// @desc Get City-Wide Dashboard metrics across all Delhi hospitals
+// @route GET /api/admin/city-dashboard
+const getCityDashboard = async (req, res) => {
+  try {
+    const verifiedHospitals = await Hospital.find({ verified: true }).lean();
+
+    const cityTotals = {
+      totalHospitals: verifiedHospitals.length,
+      totalWaitingOPD: 0,
+      totalPendingAdmissions: 0,
+      totalCriticalAdmissions: 0,
+      freeBeds: { general: 0, icu: 0, oxygen: 0, ventilator: 0, pediatric: 0 },
+    };
+
+    const hospitalStats = await Promise.all(
+      verifiedHospitals.map(async (hosp) => {
+        const freeBeds = await computeFreeBedSummary(hosp._id);
+
+        const waitingOPD = await Token.countDocuments({
+          hospitalId: hosp._id,
+          status: 'waiting',
+        });
+
+        const pendingAdmissions = await Admission.countDocuments({
+          hospitalId: hosp._id,
+          status: 'pending',
+        });
+
+        const criticalAdmissions = await Admission.countDocuments({
+          hospitalId: hosp._id,
+          status: 'pending',
+          urgency: 'critical',
+        });
+
+        // Add to city totals
+        cityTotals.totalWaitingOPD += waitingOPD;
+        cityTotals.totalPendingAdmissions += pendingAdmissions;
+        cityTotals.totalCriticalAdmissions += criticalAdmissions;
+
+        Object.keys(freeBeds).forEach((key) => {
+          cityTotals.freeBeds[key] += freeBeds[key];
+        });
+
+        return {
+          _id: hosp._id,
+          name: hosp.name,
+          address: hosp.address,
+          location: hosp.location,
+          freeBeds,
+          waitingOPD,
+          pendingAdmissions,
+          criticalAdmissions,
+        };
+      })
+    );
+
+    res.status(200).json({
+      cityTotals,
+      hospitals: hospitalStats,
+    });
+  } catch (error) {
+    res.status(500).json({ message: error.message || 'Error generating city dashboard' });
+  }
+};
 
 // @desc List all hospitals for admin review
 // @route GET /api/admin/hospitals
@@ -75,6 +143,7 @@ const listUsers = async (req, res) => {
 module.exports = {
   listAllHospitals,
   verifyHospital,
+  getCityDashboard,
   getStats,
   listUsers,
 };

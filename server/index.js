@@ -52,6 +52,7 @@ const bedRoutes = require('./routes/bed.routes');
 const admissionRoutes = require('./routes/admission.routes');
 const messageRoutes = require('./routes/message.routes');
 const notificationRoutes = require('./routes/notification.routes');
+const medicineRoutes = require('./routes/medicine.routes');
 const setupSocket = require('./socket/index');
 
 app.use('/api/auth', authRoutes);
@@ -64,12 +65,17 @@ app.use('/api/beds', bedRoutes);
 app.use('/api/admissions', admissionRoutes);
 app.use('/api/messages', messageRoutes);
 app.use('/api/notifications', notificationRoutes);
+app.use('/api/medicines', medicineRoutes);
 
 // Setup Socket.io Rooms and Handshake
 setupSocket(io);
 
 // Connect to Database
 connectDB();
+
+// Initialize Daily Cron Maintenance Jobs
+const startCronJobs = require('./jobs/closeSessions');
+startCronJobs();
 
 // Start Server if executed directly
 const PORT = process.env.PORT || 5001;

@@ -5,6 +5,7 @@ const { allowRoles } = require('../middleware/role');
 const {
   listAllHospitals,
   verifyHospital,
+  getCityDashboard,
   getStats,
   listUsers,
 } = require('../controllers/admin.controller');
@@ -14,6 +15,7 @@ router.use(verifyJWT, allowRoles('admin'));
 
 router.get('/hospitals', listAllHospitals);
 router.put('/hospitals/:id/verify', verifyHospital);
+router.get('/city-dashboard', getCityDashboard);
 router.get('/stats', getStats);
 router.get('/users', listUsers);
 
