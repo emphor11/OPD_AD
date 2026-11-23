@@ -1,6 +1,8 @@
 const Hospital = require('../models/Hospital');
 const User = require('../models/User');
+const Bed = require('../models/Bed');
 const { calculateDistance } = require('../utils/distance');
+const { computeFreeBedSummary } = require('./bed.controller');
 
 // @desc Create a new hospital (Staff only)
 // @route POST /api/hospitals
@@ -43,19 +45,23 @@ const listNearbyHospitals = async (req, res) => {
     // Only return VERIFIED hospitals to patients
     const hospitals = await Hospital.find({ verified: true }).lean();
 
-    const withDistance = hospitals.map((hosp) => {
-      const distanceKm = hosp.location?.lat && hosp.location?.lng
-        ? calculateDistance(userLat, userLng, hosp.location.lat, hosp.location.lng)
-        : null;
+    const withDistance = await Promise.all(
+      hospitals.map(async (hosp) => {
+        const distanceKm =
+          hosp.location?.lat && hosp.location?.lng
+            ? calculateDistance(userLat, userLng, hosp.location.lat, hosp.location.lng)
+            : null;
 
-      return {
-        ...hosp,
-        distanceKm,
-        // Bed counts and queue metrics populated dynamically or defaults
-        totalWaiting: 0,
-        freeBeds: { general: 0, icu: 0, oxygen: 0, ventilator: 0, pediatric: 0 },
-      };
-    });
+        const freeBeds = await computeFreeBedSummary(hosp._id);
+
+        return {
+          ...hosp,
+          distanceKm,
+          totalWaiting: 0,
+          freeBeds,
+        };
+      })
+    );
 
     // Sort ascending by distance
     withDistance.sort((a, b) => (a.distanceKm ?? 9999) - (b.distanceKm ?? 9999));
@@ -74,7 +80,8 @@ const getHospitalById = async (req, res) => {
     if (!hospital) {
       return res.status(404).json({ message: 'Hospital not found' });
     }
-    res.status(200).json(hospital);
+    const freeBeds = await computeFreeBedSummary(hospital._id);
+    res.status(200).json({ ...hospital.toObject(), freeBeds });
   } catch (error) {
     res.status(500).json({ message: error.message || 'Error fetching hospital details' });
   }

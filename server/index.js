@@ -48,6 +48,7 @@ const hospitalRoutes = require('./routes/hospital.routes');
 const adminRoutes = require('./routes/admin.routes');
 const opdRoutes = require('./routes/opd.routes');
 const tokenRoutes = require('./routes/token.routes');
+const bedRoutes = require('./routes/bed.routes');
 
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
@@ -55,6 +56,7 @@ app.use('/api/hospitals', hospitalRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/opd', opdRoutes);
 app.use('/api/tokens', tokenRoutes);
+app.use('/api/beds', bedRoutes);
 
 // Socket connection event
 io.on('connection', (socket) => {
