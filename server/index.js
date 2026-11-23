@@ -44,9 +44,13 @@ app.get('/api/health', (req, res) => {
 // Mount API Routes
 const authRoutes = require('./routes/auth.routes');
 const userRoutes = require('./routes/user.routes');
+const hospitalRoutes = require('./routes/hospital.routes');
+const adminRoutes = require('./routes/admin.routes');
 
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
+app.use('/api/hospitals', hospitalRoutes);
+app.use('/api/admin', adminRoutes);
 
 // Socket connection event
 io.on('connection', (socket) => {
