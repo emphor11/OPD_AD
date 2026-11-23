@@ -50,6 +50,8 @@ const opdRoutes = require('./routes/opd.routes');
 const tokenRoutes = require('./routes/token.routes');
 const bedRoutes = require('./routes/bed.routes');
 const admissionRoutes = require('./routes/admission.routes');
+const messageRoutes = require('./routes/message.routes');
+const setupSocket = require('./socket/index');
 
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
@@ -59,15 +61,10 @@ app.use('/api/opd', opdRoutes);
 app.use('/api/tokens', tokenRoutes);
 app.use('/api/beds', bedRoutes);
 app.use('/api/admissions', admissionRoutes);
+app.use('/api/messages', messageRoutes);
 
-// Socket connection event
-io.on('connection', (socket) => {
-  console.log(`[Socket] Client connected: ${socket.id}`);
-
-  socket.on('disconnect', () => {
-    console.log(`[Socket] Client disconnected: ${socket.id}`);
-  });
-});
+// Setup Socket.io Rooms and Handshake
+setupSocket(io);
 
 // Connect to Database
 connectDB();
