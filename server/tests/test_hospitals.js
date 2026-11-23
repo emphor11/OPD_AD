@@ -72,13 +72,16 @@ async function runHospitalTests() {
   console.log(`✅ Test 2: Haversine distance calculation verified (${dist} km)`);
 
   // Test 3: Public /api/hospitals/nearby endpoint responds with 200
+  const Bed = require('../models/Bed');
   const originalHospitalFind = Hospital.find;
+  const originalBedAggregate = Bed.aggregate;
+
   Hospital.find = function (query) {
     return {
       lean: () =>
         Promise.resolve([
           {
-            _id: 'mock-hosp-1',
+            _id: new (require('mongoose').Types.ObjectId)(),
             name: 'Lok Nayak Hospital',
             location: { lat: 28.6366, lng: 77.241 },
             verified: true,
@@ -86,6 +89,7 @@ async function runHospitalTests() {
         ]),
     };
   };
+  Bed.aggregate = () => Promise.resolve([{ _id: 'general', count: 10 }]);
 
   const nearbyRes = await request(app, { method: 'GET', url: '/api/hospitals/nearby?lat=28.6139&lng=77.2090' });
   assert.strictEqual(nearbyRes.status, 200, 'Public nearby endpoint should return 200');
@@ -94,6 +98,7 @@ async function runHospitalTests() {
   console.log('✅ Test 3: GET /api/hospitals/nearby responds 200 OK with calculated distance');
 
   Hospital.find = originalHospitalFind;
+  Bed.aggregate = originalBedAggregate;
 
   // Test 4: Role protection: Patient cannot access POST /api/hospitals (expects 401 or 403)
   const jwt = require('jsonwebtoken');
