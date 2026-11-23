@@ -49,6 +49,7 @@ const adminRoutes = require('./routes/admin.routes');
 const opdRoutes = require('./routes/opd.routes');
 const tokenRoutes = require('./routes/token.routes');
 const bedRoutes = require('./routes/bed.routes');
+const admissionRoutes = require('./routes/admission.routes');
 
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
@@ -57,6 +58,7 @@ app.use('/api/admin', adminRoutes);
 app.use('/api/opd', opdRoutes);
 app.use('/api/tokens', tokenRoutes);
 app.use('/api/beds', bedRoutes);
+app.use('/api/admissions', admissionRoutes);
 
 // Socket connection event
 io.on('connection', (socket) => {
