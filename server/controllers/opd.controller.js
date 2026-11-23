@@ -1,6 +1,7 @@
 const OpdSession = require('../models/OpdSession');
 const Token = require('../models/Token');
 const Hospital = require('../models/Hospital');
+const { sendPushNotification } = require('../utils/push');
 
 // Helper to get today's date formatted as YYYY-MM-DD
 const getTodayDateString = () => new Date().toISOString().split('T')[0];
@@ -150,6 +151,36 @@ const callNextToken = async (req, res) => {
         displayNo: nextToken.displayNo,
       });
     }
+
+    // Push Notification: Alert called patient
+    sendPushNotification({
+      userId: nextToken.patientId,
+      title: '📢 Token Called for Consultation!',
+      body: `Your OPD Token ${nextToken.displayNo} has been called. Please proceed inside the room now.`,
+      type: 'queue',
+      data: { tokenId: nextToken._id, displayNo: nextToken.displayNo, sessionId: session._id },
+    }).catch((e) => console.error('[Push Called Error]', e.message));
+
+    // Smart Proximity Detection: Notify waiting patients whose position is now <= 3
+    Token.find({
+      sessionId: session._id,
+      status: 'waiting',
+      tokenNo: { $gt: session.currentTokenNo, $lte: session.currentTokenNo + 3 },
+      notifiedNear: false,
+    }).then(async (nearTokens) => {
+      for (const nearToken of nearTokens) {
+        const ahead = nearToken.tokenNo - session.currentTokenNo;
+        await sendPushNotification({
+          userId: nearToken.patientId,
+          title: '🔔 Your Turn is Near!',
+          body: `Only ${ahead} patient${ahead > 1 ? 's' : ''} ahead of you in ${session.departmentCode} OPD. Please proceed near the consultation room.`,
+          type: 'queue',
+          data: { tokenId: nearToken._id, displayNo: nearToken.displayNo, sessionId: session._id },
+        });
+        nearToken.notifiedNear = true;
+        await nearToken.save();
+      }
+    }).catch((e) => console.error('[Proximity Scan Error]', e.message));
 
     res.status(200).json({
       message: `Called token ${nextToken.displayNo}`,
