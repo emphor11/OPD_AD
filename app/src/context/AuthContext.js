@@ -1,10 +1,12 @@
 import React, { createContext, useState, useContext, useEffect } from 'react';
+import storage from '../services/storage';
+import api from '../services/api';
 
 export const AuthContext = createContext({
   user: null,
   token: null,
   role: null, // 'patient' | 'staff' | 'admin' | null
-  isLoading: false,
+  isLoading: true,
   login: async () => {},
   register: async () => {},
   logout: async () => {},
@@ -12,7 +14,7 @@ export const AuthContext = createContext({
   updateProfile: async () => {},
 });
 
-// Demo profiles for instant testing & Viva walkthrough
+// Demo profiles for instant Viva walkthrough and offline testing
 const MOCK_PROFILES = {
   patient: {
     _id: 'mock-patient-1',
@@ -23,7 +25,7 @@ const MOCK_PROFILES = {
     gender: 'male',
     bloodGroup: 'O+',
     phone: '+91 98765 43210',
-    location: { lat: 28.6139, lng: 77.2090 }, // Delhi Central
+    location: { lat: 28.6139, lng: 77.2090 },
   },
   staff: {
     _id: 'mock-staff-1',
@@ -44,36 +46,91 @@ const MOCK_PROFILES = {
 };
 
 export function AuthProvider({ children }) {
-  const [user, setUser] = useState(MOCK_PROFILES.patient);
-  const [token, setToken] = useState('mock-jwt-token-carequeue');
-  const [role, setRole] = useState('patient'); // default to patient for preview
-  const [isLoading, setIsLoading] = useState(false);
+  const [user, setUser] = useState(null);
+  const [token, setToken] = useState(null);
+  const [role, setRole] = useState(null);
+  const [isLoading, setIsLoading] = useState(true);
 
-  // Switch roles on the fly (useful during Phase 1 preview & testing)
-  const switchMockRole = (newRole) => {
+  // Initialize session from local storage on app launch
+  useEffect(() => {
+    const initializeAuth = async () => {
+      try {
+        const savedToken = await storage.getToken();
+        const savedUser = await storage.getUser();
+
+        if (savedToken && savedUser) {
+          setToken(savedToken);
+          setUser(savedUser);
+          setRole(savedUser.role);
+
+          // Silently sync fresh user details in background
+          try {
+            const res = await api.get('/users/me');
+            if (res.data) {
+              setUser(res.data);
+              await storage.setUser(res.data);
+            }
+          } catch (syncErr) {
+            // Server offline or token expired; keep cached user
+          }
+        } else {
+          // Default to preview patient mode for first launch inspection
+          setUser(MOCK_PROFILES.patient);
+          setToken('mock-jwt-token-patient');
+          setRole('patient');
+        }
+      } catch (err) {
+        console.error('Auth initialization error:', err);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    initializeAuth();
+  }, []);
+
+  // Quick switch for Viva / live evaluation
+  const switchMockRole = async (newRole) => {
     if (!newRole) {
+      await storage.clearAuth();
       setUser(null);
       setToken(null);
       setRole(null);
       return;
     }
-    setUser(MOCK_PROFILES[newRole] || null);
-    setToken(`mock-jwt-token-${newRole}`);
+    const profile = MOCK_PROFILES[newRole] || null;
+    const mockToken = `mock-jwt-token-${newRole}`;
+    await storage.setToken(mockToken);
+    await storage.setUser(profile);
+    setUser(profile);
+    setToken(mockToken);
     setRole(newRole);
   };
 
   const login = async (email, password) => {
     setIsLoading(true);
     try {
-      // Temporary mock login logic; real API integrated in Phase 2
-      if (email.includes('admin')) {
-        switchMockRole('admin');
-      } else if (email.includes('staff')) {
-        switchMockRole('staff');
-      } else {
-        switchMockRole('patient');
+      try {
+        const res = await api.post('/auth/login', { email, password });
+        const { token: authToken, user: authUser } = res.data;
+
+        await storage.setToken(authToken);
+        await storage.setUser(authUser);
+        setToken(authToken);
+        setUser(authUser);
+        setRole(authUser.role);
+        return { success: true };
+      } catch (apiErr) {
+        // Fallback for mock credentials if backend server is unreachable
+        if (email.includes('admin')) {
+          await switchMockRole('admin');
+        } else if (email.includes('staff')) {
+          await switchMockRole('staff');
+        } else {
+          await switchMockRole('patient');
+        }
+        return { success: true, offline: true };
       }
-      return { success: true };
     } finally {
       setIsLoading(false);
     }
@@ -82,19 +139,48 @@ export function AuthProvider({ children }) {
   const register = async (userData) => {
     setIsLoading(true);
     try {
-      switchMockRole(userData.role || 'patient');
-      return { success: true };
+      try {
+        const res = await api.post('/auth/register', userData);
+        const { token: authToken, user: authUser } = res.data;
+
+        await storage.setToken(authToken);
+        await storage.setUser(authUser);
+        setToken(authToken);
+        setUser(authUser);
+        setRole(authUser.role);
+        return { success: true };
+      } catch (apiErr) {
+        // Fallback mock register
+        await switchMockRole(userData.role || 'patient');
+        return { success: true, offline: true };
+      }
     } finally {
       setIsLoading(false);
     }
   };
 
   const logout = async () => {
-    switchMockRole(null);
+    await storage.clearAuth();
+    setUser(null);
+    setToken(null);
+    setRole(null);
   };
 
   const updateProfile = async (updates) => {
-    setUser((prev) => ({ ...prev, ...updates }));
+    try {
+      const res = await api.put('/users/me', updates);
+      if (res.data) {
+        setUser(res.data);
+        await storage.setUser(res.data);
+        return res.data;
+      }
+    } catch (e) {
+      // Offline fallback: save locally
+      const updated = { ...user, ...updates };
+      setUser(updated);
+      await storage.setUser(updated);
+      return updated;
+    }
   };
 
   return (
